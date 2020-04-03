@@ -9,8 +9,6 @@ typedef char *(*ReduceStateGetter)(char* key, int partition_number);
 typedef void (*Mapper)(char *file_name);
 typedef void (*Combiner)(char *key, CombineGetter get_next);
 // Simple mode: `get_state` is NULL and `get_next` can be called until you get NULL
-// Eager mode: `get_state` and `get_next` will only be called once inside the reducer
-// More details on the modes are provided later
 typedef void (*Reducer)(char *key, ReduceStateGetter get_state,
                         ReduceGetter get_next, int partition_number);
 typedef unsigned long (*Partitioner)(char *key, int num_partitions);

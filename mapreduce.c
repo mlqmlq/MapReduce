@@ -64,6 +64,28 @@ int compare(const void* p1, const void* p2) {
 	return strcmp(pair1->key, pair2->key);
 }
 
+char* reducer_get_next(char *key, int partition_number) {
+	int num = numberOfAccessInPartition[partition_number];
+	if(num < pairCountInPartition[partition_number] && strcmp(key, partitions[partition_number][num].key) == 0) {
+		numberOfAccessInPartition[partition_number]++;
+		return partitions[partition_number][num].value;
+	}
+	else {
+		return NULL;
+	}
+}
+
+
+void* reducerHelper(void *arg) {
+	int* partitionNumber = (int *)arg;
+	for(int i = 0; i < pairCountInPartition[*partitionNumber]; i++) {
+		if(i == numberOfAccessInPartition[*partitionNumber]) {
+			r(partitions[*partitionNumber][i].key, NULL, reducer_get_next, *partitionNumber);
+		}
+	}
+	return arg;
+}
+
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Combiner combine, Partitioner partition) {
     totalFiles = argc - 1;
     if(totalFiles < num_mappers) {
@@ -92,6 +114,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 		arrayPosition[i] = i;
 		numberOfAccessInPartition[i] = 0;
 	}
+
     // Copying files for sorting in struct
 	for(int i = 0; i <argc-1; i++) {
 		fileNames[i].name = malloc((strlen(argv[i+1])+1) * sizeof(char));
@@ -103,9 +126,61 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 	for (int i = 0; i < num_mappers; i++) {
 		pthread_create(&mapperThreads[i], NULL, mapperHelper, NULL);
 	}
+
     // Waiting for threads to finish
 	for(int i = 0; i < num_mappers; i++) {
 		pthread_join(mapperThreads[i], NULL); 
 	}
 
+	// Sorting the partitions
+	for(int i = 0; i < num_reducers; i++) {
+		qsort(partitions[i], pairCountInPartition[i], sizeof(struct pairs), compare);
+	}
+
+	// Creating the threads for the number of reducers
+	for (int i = 0; i < num_reducers; i++){
+	    if(pthread_create(&reducerThreads[i], NULL, reducerHelper, &arrayPosition[i])) {
+	    	printf("Error\n");
+	    }
+	}
+
+	//Waiting for the threads to finish
+	for(int i = 0; i < num_reducers; i++) {
+		pthread_join(reducerThreads[i], NULL); 
+	}
+
+	pthread_mutex_destroy(&lock);
+	pthread_mutex_destroy(&fileLock);
+	for(int i = 0; i < num_reducers; i++) {
+		// Freeing the keys and values
+		for(int j = 0; j < pairCountInPartition[i]; j++) {
+			if(partitions[i][j].key != NULL && partitions[i][j].value != NULL) {
+				free(partitions[i][j].key);
+		    	free(partitions[i][j].value);
+			}
+		}
+		// Freeing the pair struct array
+		free(partitions[i]);
+	}
+
+	// Freeing filenames
+	for(int i = 0; i < argc-1; i++) {
+		free(fileNames[i].name);
+	}
+
+	// Freeing memory
+	free(partitions);
+	free(fileNames);
+	free(pairCountInPartition);
+	free(pairAllocatedInPartition);
+	free(numberOfAccessInPartition);
+}
+
+//Default hash function
+unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
+    unsigned long hash = 5381;
+    int c;
+    while ((c = *key++) != '\0')
+        hash = hash * 33 + c;
+    return hash % num_partitions;
 }
