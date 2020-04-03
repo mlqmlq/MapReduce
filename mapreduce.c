@@ -23,7 +23,7 @@ int* numberOfAccessInMap;
 int* pairCountInPartition;
 int* pairAllocatedInPartition;
 int* numberOfAccessInPartition;
-long* tidArray;
+pthread_t* tidArray;
 
 pthread_mutex_t lock, fileLock;
 Partitioner p;
@@ -47,7 +47,9 @@ int compareFiles(const void* p1, const void* p2) {
 	return (size1 - size2);
 }
 
-int getIndex(long value, long* array, int len) {
+int getIndex(pthread_t value, pthread_t* array, int len) {
+	printf("%d\n", len);
+	printf("%ld\n", (long)array[0]);
 	for (int i = 0; i < len; i++) {
 		if (array[i] == 0) {
 			array[i] = value;
@@ -70,7 +72,7 @@ int compare(const void* p1, const void* p2) {
 }
 
 char* combiner_get_next(char *key) {
-	long tid = (long)pthread_self();
+	pthread_t tid = pthread_self();
 	int index = getIndex(tid, tidArray, numberMaps);
 	int num = numberOfAccessInMap[index];
 	if(num < pairCountInMap[index] && strcmp(key, mapArray[index][num].key) == 0) {
@@ -97,7 +99,7 @@ void* mapperHelper(void *arg) {
 	if (c == NULL) {
 		return arg;
 	} else {
-		long tid = (long)pthread_self();
+		pthread_t tid = pthread_self();
 		int index = getIndex(tid, tidArray, numberMaps);
 		qsort(mapArray[index], pairCountInMap[index], sizeof(struct pairs), compare)	;
 		for(int i = 0; i < pairCountInMap[index]; i++) {
@@ -152,7 +154,7 @@ void MR_EmitToCombiner(char *key, char *value) {
 		pthread_mutex_unlock(&lock); 
 	} else {
 		pthread_mutex_lock(&lock); 
-		long tid = (long)pthread_self();
+		pthread_t tid = pthread_self();
 		int index = getIndex(tid, tidArray, numberMaps);
 		pairCountInMap[index]++;
 		int curCount = pairCountInMap[index];
@@ -205,7 +207,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 	numberMaps = num_mappers;
     partitions = malloc(num_reducers * sizeof(struct pairs*));
 	mapArray = malloc(num_mappers * sizeof(struct pairs*));
-	tidArray = malloc(num_mappers * sizeof(long));
+	tidArray = malloc(num_mappers * sizeof(pthread_t));
     fileNames = malloc(totalFiles * sizeof(struct files));
     pairCountInPartition = malloc(num_reducers * sizeof(int));
 	pairAllocatedInPartition = malloc(num_reducers * sizeof(int));
@@ -221,6 +223,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 		pairCountInMap[i] = 0;
 		pairAllocatedInMap[i] = 1024;
 		numberOfAccessInMap[i] = 0;
+		tidArray[i] = 0;
 	}
 	
 	for(int i = 0; i < num_reducers; i++) {
@@ -304,6 +307,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 	free(pairCountInMap);
 	free(pairAllocatedInMap);
 	free(numberOfAccessInMap);
+	free(tidArray);
 }
 
 //Default hash function

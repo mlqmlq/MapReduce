@@ -55,6 +55,7 @@ void Reduce(char *key, ReduceStateGetter get_state,
 }
 
 int main(int argc, char *argv[]) {
-    MR_Run(argc, argv, Map, 10,
-        Reduce, 10, NULL, MR_DefaultHashPartition);
+    MR_Run(argc, argv, Map, 1, Reduce, 1, Combine, MR_DefaultHashPartition);
+    MR_Run(argc, argv, Map, 1, Reduce, 1, Combine, MR_DefaultHashPartition);
+    MR_Run(argc, argv, Map, 1, Reduce, 1, Combine, MR_DefaultHashPartition);
 }
