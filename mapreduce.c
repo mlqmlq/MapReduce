@@ -94,15 +94,19 @@ void* mapperHelper(void *arg) {
 		if(filename != NULL)
 			m(filename);
 	}
-	long tid = (long)pthread_self();
-	int index = getIndex(tid, tidArray, numberMaps);
-	qsort(mapArray[index], pairCountInMap[index], sizeof(struct pairs), compare);
-	for(int i = 0; i < pairCountInMap[index]; i++) {
-		if(i == numberOfAccessInMap[index]) {
-			c(mapArray[index][i].key, combiner_get_next);
+	if (c == NULL) {
+		return arg;
+	} else {
+		long tid = (long)pthread_self();
+		int index = getIndex(tid, tidArray, numberMaps);
+		qsort(mapArray[index], pairCountInMap[index], sizeof(struct pairs), compare)	;
+		for(int i = 0; i < pairCountInMap[index]; i++) {
+			if(i == numberOfAccessInMap[index]) {
+				c(mapArray[index][i].key, combiner_get_next);
+			}
 		}
+		return arg;
 	}
-	return arg;
 }
 
 
@@ -130,21 +134,39 @@ void* reducerHelper(void *arg) {
 
 
 void MR_EmitToCombiner(char *key, char *value) {
-	pthread_mutex_lock(&lock); 
-	long tid = (long)pthread_self();
-	int index = getIndex(tid, tidArray, numberMaps);
-	pairCountInMap[index]++;
-	int curCount = pairCountInMap[index];
-	// Checking if allocated memory has been exceeded,if yes allocating more memory
-	if (curCount > pairAllocatedInMap[index]) {
-		pairAllocatedInMap[index] *= 2;
-		mapArray[index] = (struct pairs *) realloc(mapArray[index], pairAllocatedInMap[index] * sizeof(struct pairs));
+	if (c == NULL) {
+		pthread_mutex_lock(&lock); 
+		// Getting the partition number
+		unsigned long hashPartitionNumber = p(key, numberPartitions);
+		pairCountInPartition[hashPartitionNumber]++;
+		int curCount = pairCountInPartition[hashPartitionNumber];
+		// Checking if allocated memory has been exceeded,if yes allocating more 	memory
+		if (curCount > pairAllocatedInPartition[hashPartitionNumber]) {
+			pairAllocatedInPartition[hashPartitionNumber] *= 2;
+			partitions[hashPartitionNumber] = (struct pairs *) realloc(partitions	[hashPartitionNumber], pairAllocatedInPartition[hashPartitionNumber] * 	sizeof(struct pairs));
+		}
+		partitions[hashPartitionNumber][curCount-1].key = (char*)malloc((strlen(key)	+1) * sizeof(char));
+		strcpy(partitions[hashPartitionNumber][curCount-1].key, key);
+		partitions[hashPartitionNumber][curCount-1].value = (char*)malloc((strlen	(value)+1) * sizeof(char));
+		strcpy(partitions[hashPartitionNumber][curCount-1].value, value);
+		pthread_mutex_unlock(&lock); 
+	} else {
+		pthread_mutex_lock(&lock); 
+		long tid = (long)pthread_self();
+		int index = getIndex(tid, tidArray, numberMaps);
+		pairCountInMap[index]++;
+		int curCount = pairCountInMap[index];
+		// Checking if allocated memory has been exceeded,if yes allocating more 	memory
+		if (curCount > pairAllocatedInMap[index]) {
+			pairAllocatedInMap[index] *= 2;
+			mapArray[index] = (struct pairs *) realloc(mapArray[index], 	pairAllocatedInMap[index] * sizeof(struct pairs));
+		}
+		mapArray[index][curCount-1].key = (char*)malloc((strlen(key)+1) * sizeof	(char));
+		strcpy(mapArray[index][curCount-1].key, key);
+		mapArray[index][curCount-1].value = (char*)malloc((strlen(value)+1) * sizeof	(char));
+		strcpy(mapArray[index][curCount-1].value, value);
+		pthread_mutex_unlock(&lock); 
 	}
-	mapArray[index][curCount-1].key = (char*)malloc((strlen(key)+1) * sizeof(char));
-	strcpy(mapArray[index][curCount-1].key, key);
-	mapArray[index][curCount-1].value = (char*)malloc((strlen(value)+1) * sizeof(char));
-	strcpy(mapArray[index][curCount-1].value, value);
-	pthread_mutex_unlock(&lock); 
 }
 
 
